@@ -1,93 +1,104 @@
-# batullina-agona-2024
+# Java Concurrency Core - набор примеров многопоточности
 
+## Общая идея
 
+Репозиторий содержит набор изолированных кейсов, демонстрирующих основные модели конкурентности в Java: синхронизацию, lock-free операции, координацию потоков, планирование задач и виртуальные потоки. Каждый пример иллюстрирует отдельный аспект поведения конкурентных систем и их взаимодействие под нагрузкой.
 
-## Getting started
+---
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+## 1. BlockingQueue (producer–consumer)
+- Реализован bounded buffer через ArrayBlockingQueue
+- Демонстрация backpressure: producer блокируется при заполнении очереди, consumer - при пустой
+- Координация потоков через put()/take() без явных wait/notify
+- Используется виртуальный поток на каждую задачу (newVirtualThreadPerTaskExecutor)
+- Сериализация вывода через ReentrantLock для предотвращения перемешивания логов при конкурентной записи в System.out
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+---
 
-## Add your files
+## 2. AtomicInteger (CAS)
+- Показано, что counter++ не является атомарной операцией (read-modify-write)
+- Используется AtomicInteger как lock-free механизм синхронизации
+- Обновления выполняются через CAS (Compare-And-Swap)
+- Гарантируется корректный результат при конкурентных инкрементах без synchronized и Lock
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
+---
 
-```
-cd existing_repo
-git remote add origin https://gitlab.com/EkaterinaBatullina/batullina-agona-2024.git
-git branch -M main
-git push -uf origin main
-```
+## 3. ExecutorService + Callable + Future
+- Используется Callable для задач, возвращающих результат
+- Асинхронное выполнение через ExecutorService с виртуальными потоками
+- Future представляет результат выполнения задачи и её состояние
+- get() - блокирующий вызов, ожидающий завершения вычислений
+- Поддержан таймаут ожидания через get(timeout, TimeUnit)
+- Обработаны исключения выполнения (ExecutionException, TimeoutException, InterruptedException)
 
-## Integrate with your tools
+---
 
-- [ ] [Set up project integrations](https://gitlab.com/EkaterinaBatullina/batullina-agona-2024/-/settings/integrations)
+## 4. Virtual threads (базовая модель)
+- Используется newVirtualThreadPerTaskExecutor для запуска задач в виртуальных потоках
+- Массовый параллелизм без создания OS threads (one task = one virtual thread)
+- Демонстрация блокирующего поведения (sleep) без затрат на platform thread parking
+- Имитация I/O-задачи с прогрессом выполнения (upload simulation)
+- Сериализация вывода через ReentrantLock для читаемого логирования при высокой конкуренции
 
-## Collaborate with your team
+---
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
+## 5. HTTP Server (virtual thread per request)
+- Каждый HTTP-запрос обрабатывается в отдельном виртуальном потоке (Thread.startVirtualThread)
+- Модель request-per-thread без затрат на platform thread на каждый запрос
+- Масштабируемая обработка большого числа concurrent HTTP соединений
+- Корректное освобождение ресурсов через exchange.close() и try-with-resources для response body
+- Сериализация логов через ReentrantLock для читаемого вывода при параллельной обработке запросов
+---
 
-## Test and Deploy
+## 6. Account + ReentrantLock (synchronization and deadlock avoidance)
+- Модель банковского аккаунта с потокобезопасным доступом через ReentrantLock
+- Защита критической секции операций deposit, withdraw, getBalance
+- Реализован transfer между аккаунтами с потенциальным deadlock сценарием
+- Избежание deadlock через tryLock(timeout) и повторные попытки захвата обоих locks
+- Используется backoff (Thread.sleep) для предотвращения активного ожидания
+- Гарантируется консистентность баланса при конкурентных переводах
 
-Use the built-in continuous integration in GitLab.
+---
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+## 7. ScheduledExecutorService (task scheduling)
+- Используется ScheduledExecutorService для периодического выполнения задач
+- Модель scheduleWithFixedDelay: следующий запуск происходит после завершения предыдущего
+- Демонстрация отличия delay-based scheduling
+- Обработка исключений внутри задачи для предотвращения остановки периодического execution
+- Показано влияние необработанных ошибок на жизненный цикл scheduled tasks
+- Корректное завершение через shutdown() с отложенной остановкой
 
-***
+---
 
-# Editing this README
+## 8. Semaphore (resource limiting)
+- Используется Semaphore для ограничения количества одновременно выполняемых операций
+- Модель ограниченного ресурса (parking spots = 3)
+- acquire()/release() управляют доступом к критической секции
+- Демонстрация blocking поведения при отсутствии доступных permits
+- Используется fairness mode (fair = true) для FIFO распределения доступа
+- Гарантированное освобождение ресурса через finally блок
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+---
 
-## Suggestions for a good README
+## 9. VirtualThreadTask (scalability demonstration)
+- Запуск большого количества виртуальных потоков (10_000 concurrent tasks)
+- Демонстрация масштабируемости виртуальных потоков по сравнению с платформенными
+- Блокирующая операция (Thread.sleep) не приводит к блокировке OS thread
+- Показано поведение виртуальных потоков при массовом параллельном запуске
+- Синхронизация вывода через ReentrantLock для читаемого логирования результатов
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+---
 
-## Name
-Choose a self-explaining name for your project.
+## Итог
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+Репозиторий демонстрирует базовые и прикладные механизмы конкурентности в Java через набор изолированных кейсов:
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+- модели синхронизации (locks, Semaphore)
+- lock-free подход (CAS через AtomicInteger)
+- координация потоков (BlockingQueue, ExecutorService, Future)
+- планирование задач (ScheduledExecutorService)
+- обработка I/O и request-per-thread модель
+- виртуальные потоки и их масштабирование
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+Проекты иллюстрируют ключевые свойства конкурентных систем:
+blocking behavior, race conditions, deadlock avoidance, task scheduling semantics и scalability при высокой конкуренции.
