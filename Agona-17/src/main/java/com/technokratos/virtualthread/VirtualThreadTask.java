@@ -3,11 +3,6 @@ package com.technokratos.virtualthread;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class VirtualThreadTask {
-
-    /*
-     * Используется для упорядоченного вывода,
-     * чтобы строки разных потоков не перемешивались.
-     */
     private static final ReentrantLock lock = new ReentrantLock();
 
     public static void main(String[] args) {
